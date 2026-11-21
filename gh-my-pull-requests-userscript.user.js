@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub: My Pull Requests Button
 // @namespace    https://github.com/chirag127
-// @version      1.0.2
+// @version      1.0.3
 // @description  Adds a "My pull requests" button to GitHub's header that opens all pull requests involving your account.
 // @author       chirag127
 // @match        https://github.com/*
@@ -18,10 +18,9 @@
   const LABEL = 'My pull requests';
 
   function mount() {
-    // A partial removal can leave one of our wrappers with no link inside it.
-    // Drop those before deciding whether a live link is already mounted.
-    // Skip anchors: a foreign script's direct anchor may carry our class.
-    for (const wrapper of document.querySelectorAll('.chirag-gh-nav-button')) {
+    // Only wrappers we marked are ours to clean. Another script's wrapper or a
+    // foreign node that merely shares the class must survive untouched.
+    for (const wrapper of document.querySelectorAll('[data-chirag-nav-id="' + ID + '"]')) {
       if (wrapper.tagName !== 'A' && !wrapper.querySelector('a[href]')) wrapper.remove();
     }
     if (document.getElementById(ID)) return;
@@ -52,6 +51,7 @@
 
     item.removeAttribute('id');
     item.classList.add('chirag-gh-nav-button');
+    item.setAttribute('data-chirag-nav-id', ID);
     link.id = ID;
     link.href = HREF;
     link.textContent = LABEL;

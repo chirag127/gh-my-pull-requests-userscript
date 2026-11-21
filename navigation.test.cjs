@@ -134,3 +134,19 @@ test('other userscript direct anchors are not used as native templates', () => {
   const native = h.native(nav).link; h.run(); const link = h.verify(nav);
   assert.equal(link.classList.contains('foreign-style'), false); assert.equal(link.classList.contains('native-link'), true); assert.equal(native.href, '/dashboard'); assert.equal(foreign.id, 'other-script');
 });
+test('stale cleanup removes only this script\'s own wrapper', () => {
+  const otherId = pulls ? 'chirag-my-issues-link' : 'chirag-my-pull-requests-link';
+  const h = harness(); const nav = h.nav('ul'); h.native(nav);
+  const stale = nav.appendChild(new Element('li'));
+  stale.classList.add('chirag-gh-nav-button'); stale.setAttribute('data-chirag-nav-id', ID);
+  const other = nav.appendChild(new Element('li'));
+  other.classList.add('chirag-gh-nav-button'); other.setAttribute('data-chirag-nav-id', otherId);
+  const foreign = nav.appendChild(new Element('div')); foreign.classList.add('chirag-gh-nav-button');
+  h.run();
+  assert.equal(stale.parentNode, null);
+  assert.equal(other.parentNode, nav);
+  assert.equal(foreign.parentNode, nav);
+  assert.equal(h.document.getElementById(otherId), null);
+  h.verify(nav);
+  assert.equal(nav.querySelectorAll('[data-chirag-nav-id="' + otherId + '"]').length, 1);
+});
