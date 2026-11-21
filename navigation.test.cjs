@@ -254,3 +254,50 @@ test('host selection skips a list inside a foreign wrapper', () => {
   assert.equal(link.parentNode.parentNode, nativeList);
   assert.equal(foreignList.querySelectorAll('a[href]').length, 1);
 });
+test('restores a removed href on an owned mounted link in a list', () => {
+  const h = harness(); const nav = h.nav('ul'); h.native(nav); h.run();
+  h.verify(nav).removeAttribute('href');
+  h.mutate();
+  const restored = h.verify(nav);
+  assert.equal(restored.getAttribute('href'), HREF);
+});
+test('restores a wrong href on an owned direct-anchor link', () => {
+  const h = harness(); const nav = h.nav(); h.native(nav); h.run();
+  h.verify(nav).setAttribute('href', '/wrong');
+  h.mutate();
+  const restored = h.verify(nav);
+  assert.equal(restored.getAttribute('href'), HREF);
+  assert.equal(restored.parentNode, nav);
+});
+test('rebuilds an owned link after simultaneous id and href loss', () => {
+  const h = harness(); const nav = h.nav('ul'); h.native(nav); h.run();
+  const link = h.verify(nav); link.removeAttribute('id'); link.removeAttribute('href');
+  h.mutate();
+  const restored = h.verify(nav);
+  assert.equal(restored.getAttribute('href'), HREF);
+  assert.equal(nav.querySelectorAll('a[href="' + HREF + '"]').length, 1);
+});
+test('does not modify an unowned element that shares the injected id', () => {
+  const h = harness(); const nav = h.nav();
+  const foreign = nav.appendChild(new Element('a')); foreign.id = ID; foreign.href = '/foreign';
+  h.run(); h.mutate();
+  assert.equal(foreign.getAttribute('href'), '/foreign');
+  assert.equal(nav.querySelectorAll('a[href="' + HREF + '"]').length, 0);
+});
+test('reclaims a direct anchor only when its destination still matches', () => {
+  const h = harness(); const nav = h.nav(); h.native(nav); h.run();
+  const link = h.verify(nav); link.removeAttribute('id'); link.setAttribute('href', '/dashboard');
+  h.mutate();
+  const restored = h.verify(nav);
+  assert.equal(restored.getAttribute('href'), HREF);
+  assert.equal(restored.parentNode, nav);
+});
+test('reconciles an anchor moved out of its owned wrapper', () => {
+  const h = harness(); const nav = h.nav('ul'); h.native(nav); h.run();
+  nav.appendChild(h.verify(nav));
+  h.mutate();
+  const restored = h.verify(nav);
+  assert.equal(restored.getAttribute('href'), HREF);
+  assert.equal(nav.querySelectorAll('[data-chirag-nav-id="' + ID + '"]').length, 1);
+  assert.equal(nav.querySelectorAll('a[href="' + HREF + '"]').length, 1);
+});

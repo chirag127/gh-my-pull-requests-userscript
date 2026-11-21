@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub: My Pull Requests Button
 // @namespace    https://github.com/chirag127
-// @version      1.0.4
+// @version      1.0.5
 // @description  Adds a "My pull requests" button to GitHub's header that opens all pull requests involving your account.
 // @author       chirag127
 // @match        https://github.com/*
@@ -18,8 +18,28 @@
   const LABEL = 'My pull requests';
 
   function mount() {
-    // The common case: a healthy mounted link needs no document-wide work.
-    if (document.getElementById(ID)) return;
+    // Cheap path: an intact, correctly owned link needs no global query.
+    const mounted = document.getElementById(ID);
+    if (mounted) {
+      const owned = mounted.closest('[data-chirag-nav-id="' + ID + '"]');
+      const isOurLink = mounted.tagName === 'A' &&
+        mounted.getAttribute('href') === HREF && mounted.textContent === LABEL;
+      if (owned) {
+        if (isOurLink) return;
+        if (mounted.tagName === 'A') {
+          mounted.setAttribute('href', HREF);
+          mounted.textContent = LABEL;
+          mounted.title = LABEL;
+          return;
+        }
+      } else if (isOurLink) {
+        // Reparented out of its wrapper: drop it so stale owned wrappers can
+        // be reconciled and a correctly placed link mounted.
+        mounted.remove();
+      } else {
+        return; // An unowned element merely sharing our id is left alone.
+      }
+    }
 
     // Reconcile only nodes carrying this script's marker. A marked link that
     // lost its id is restored; a marked wrapper without a marked link is ours
@@ -27,7 +47,7 @@
     for (const owned of document.querySelectorAll('[data-chirag-nav-id="' + ID + '"]')) {
       if (!owned.parentNode) continue;
       if (owned.tagName === 'A') {
-        if (!owned.getAttribute('href')) owned.remove();
+        if (owned.getAttribute('href') !== HREF) owned.remove();
         else if (owned.id !== ID) owned.id = ID;
         continue;
       }
