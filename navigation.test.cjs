@@ -150,3 +150,107 @@ test('stale cleanup removes only this script\'s own wrapper', () => {
   h.verify(nav);
   assert.equal(nav.querySelectorAll('[data-chirag-nav-id="' + otherId + '"]').length, 1);
 });
+
+for (const tag of ['nav', 'ul', 'ol']) {
+  for (const loss of ['removed', 'changed']) test(tag + ' remount reconciles an owned link with ' + loss + ' id', () => {
+    const h = harness(); const nav = h.nav(tag); const native = h.native(nav).link;
+    const other = nav.appendChild(new Element(tag === 'nav' ? 'a' : 'li'));
+    other.classList.add('chirag-gh-nav-button'); other.setAttribute('data-chirag-nav-id', OTHER_ID);
+    const otherLink = other.tagName === 'A' ? other : other.appendChild(new Element('a'));
+    otherLink.href = '/issues';
+    const initialCount = nav.children.length;
+    h.run();
+    for (let i = 0; i < 3; i++) {
+      const link = h.verify(nav);
+      if (loss === 'removed') link.removeAttribute('id'); else link.id = 'stale-pulls-' + i;
+      h.mutate();
+      const restored = h.verify(nav);
+      assert.equal(nav.children.length, initialCount + 1);
+      assert.equal(h.document.querySelectorAll('[data-chirag-nav-id="' + ID + '"]').length, 1);
+      assert.equal(h.document.querySelectorAll('a[href="' + HREF + '"]').length, 1);
+      assert.equal(restored.classList.contains('native-link'), true);
+      assert.equal(native.href, '/dashboard');
+      assert.equal(other.parentNode, nav);
+      assert.equal(other.getAttribute('data-chirag-nav-id'), OTHER_ID);
+      assert.equal(otherLink.href, '/issues'); assert.equal(otherLink.id, '');
+    }
+  });
+}
+
+for (const excluded of ['anchor', 'wrapper']) test('list cloning uses the filtered native donor after a foreign ' + excluded, () => {
+  const h = harness(); const nav = h.nav('ul'); const item = nav.appendChild(new Element('li'));
+  item.classList.add('native-item');
+  const foreignHost = excluded === 'anchor' ? item : item.appendChild(new Element('span'));
+  const foreign = foreignHost.appendChild(new Element('a')); foreign.href = '/foreign'; foreign.id = 'foreign-link'; foreign.classList.add('foreign-style');
+  const marked = excluded === 'anchor' ? foreign : foreignHost;
+  marked.classList.add('chirag-gh-nav-button'); marked.setAttribute('data-chirag-nav-id', OTHER_ID);
+  const native = h.native(item).link; native.id = 'native-donor'; native.setAttribute('data-action', 'native-menu');
+  const originalChildren = [...item.children]; const foreignAttributes = foreign.attributes; const nativeAttributes = native.attributes;
+  h.run(); const injected = h.verify(nav);
+  assert.equal(injected.classList.contains('foreign-style'), false);
+  assert.equal(injected.classList.contains('native-link'), true);
+  assert.equal(injected.parentNode.classList.contains('native-item'), true);
+  assert.deepEqual(injected.parentNode.children, [injected]);
+  assert.equal(injected.getAttribute('data-action'), null);
+  assert.equal(h.document.getElementById('foreign-link'), foreign);
+  assert.equal(h.document.getElementById('native-donor'), native);
+  assert.deepEqual(item.children, originalChildren);
+  assert.deepEqual(foreign.attributes, foreignAttributes); assert.deepEqual(native.attributes, nativeAttributes);
+  assert.equal(marked.getAttribute('data-chirag-nav-id'), OTHER_ID);
+});
+
+for (const tag of ['ul', 'ol']) test('nested donor in ' + tag + ' keeps native anchor classes in a fresh top-level item', () => {
+  const h = harness(); const nav = h.nav(); const host = nav.appendChild(new Element(tag));
+  const outerItem = host.appendChild(new Element('li')); const nested = outerItem.appendChild(new Element(tag));
+  const { item, link: native } = h.native(nested); item.classList.add('nested-menu'); native.id = 'nested-native';
+  h.run(); const injected = h.verify(host);
+  assert.equal(injected.classList.contains('native-link'), true);
+  assert.equal(injected.parentNode.tagName, 'LI'); assert.deepEqual(injected.parentNode.children, [injected]);
+  assert.equal(injected.parentNode.classList.contains('nested-menu'), false);
+  assert.equal(host.children.length, 2);
+  assert.equal(h.document.getElementById('nested-native'), native); assert.equal(native.parentNode, item);
+  assert.deepEqual(outerItem.children, [nested]); assert.deepEqual(nested.children, [item]);
+});
+test('restores identity on an owned link instead of appending a duplicate', () => {
+  const h = harness(); const nav = h.nav('ul'); h.native(nav); h.run();
+  h.verify(nav).removeAttribute('id');
+  h.mutate(); h.verify(nav);
+  assert.equal(nav.querySelectorAll('a[href="' + HREF + '"]').length, 1);
+  assert.equal(nav.querySelectorAll('li[data-chirag-nav-id="' + ID + '"]').length, 1);
+});
+test('clones the filtered native anchor from a mixed foreign/native li', () => {
+  const h = harness(); const nav = h.nav('ul'); const donor = nav.appendChild(new Element('li'));
+  const foreign = donor.appendChild(new Element('a')); foreign.href = '/foreign'; foreign.id = 'other-script'; foreign.classList.add('chirag-gh-nav-button', 'foreign-style');
+  const native = donor.appendChild(new Element('a')); native.href = '/dashboard'; native.classList.add('native-link');
+  h.run(); const link = h.verify(nav);
+  assert.equal(link.classList.contains('foreign-style'), false);
+  assert.equal(link.classList.contains('native-link'), true);
+  assert.equal(foreign.parentNode, donor);
+  assert.equal(donor.querySelectorAll('a[href]').length, 2);
+});
+test('nested native template keeps its classes in the fresh-li fallback', () => {
+  const h = harness(); const nav = h.nav(); const host = nav.appendChild(new Element('ul'));
+  const mid = host.appendChild(new Element('li')); const inner = mid.appendChild(new Element('ul')); const deep = inner.appendChild(new Element('li'));
+  const native = deep.appendChild(new Element('a')); native.href = '/dashboard'; native.classList.add('native-link');
+  h.run(); const link = h.verify(host);
+  assert.equal(link.classList.contains('native-link'), true);
+  assert.equal(deep.querySelectorAll('a[href]').length, 1);
+});
+test('valid mounted link skips document-wide ownership queries', () => {
+  const h = harness(); const nav = h.nav('ul'); h.native(nav); h.run(); h.verify(nav);
+  const original = h.document.querySelectorAll; let calls = 0;
+  h.document.querySelectorAll = selector => { calls++; return original.call(h.document, selector); };
+  for (let i = 0; i < 5; i++) h.mutate();
+  assert.equal(calls, 0);
+});
+test('host selection skips a list inside a foreign wrapper', () => {
+  const h = harness(); const nav = h.nav();
+  const foreignList = nav.appendChild(new Element('ul'));
+  foreignList.classList.add('chirag-gh-nav-button');
+  const foreignLink = foreignList.appendChild(new Element('li')).appendChild(new Element('a'));
+  foreignLink.href = '/foreign';
+  const nativeList = nav.appendChild(new Element('ul')); h.native(nativeList);
+  h.run(); const link = h.verify(nativeList);
+  assert.equal(link.parentNode.parentNode, nativeList);
+  assert.equal(foreignList.querySelectorAll('a[href]').length, 1);
+});

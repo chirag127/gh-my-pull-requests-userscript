@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub: My Pull Requests Button
 // @namespace    https://github.com/chirag127
-// @version      1.0.3
+// @version      1.0.4
 // @description  Adds a "My pull requests" button to GitHub's header that opens all pull requests involving your account.
 // @author       chirag127
 // @match        https://github.com/*
@@ -18,10 +18,23 @@
   const LABEL = 'My pull requests';
 
   function mount() {
-    // Only wrappers we marked are ours to clean. Another script's wrapper or a
-    // foreign node that merely shares the class must survive untouched.
-    for (const wrapper of document.querySelectorAll('[data-chirag-nav-id="' + ID + '"]')) {
-      if (wrapper.tagName !== 'A' && !wrapper.querySelector('a[href]')) wrapper.remove();
+    // The common case: a healthy mounted link needs no document-wide work.
+    if (document.getElementById(ID)) return;
+
+    // Reconcile only nodes carrying this script's marker. A marked link that
+    // lost its id is restored; a marked wrapper without a marked link is ours
+    // to remove. Foreign nodes and the other script's markers are untouched.
+    for (const owned of document.querySelectorAll('[data-chirag-nav-id="' + ID + '"]')) {
+      if (!owned.parentNode) continue;
+      if (owned.tagName === 'A') {
+        if (!owned.getAttribute('href')) owned.remove();
+        else if (owned.id !== ID) owned.id = ID;
+        continue;
+      }
+      const ownedLink = Array.from(owned.querySelectorAll('a[href]'))
+        .find(a => a.getAttribute('href') === HREF);
+      if (!ownedLink || !ownedLink.getAttribute('href')) owned.remove();
+      else if (ownedLink.id !== ID) ownedLink.id = ID;
     }
     if (document.getElementById(ID)) return;
 
@@ -31,14 +44,20 @@
       document.querySelector('header nav');
     if (!nav) return;
 
-    const host = nav.matches('ul, ol') ? nav : nav.querySelector('ul, ol') || nav;
+    let host = nav;
+    if (!nav.matches('ul, ol')) {
+      host = Array.from(nav.querySelectorAll('ul, ol'))
+        .find(list => !list.closest('.chirag-gh-nav-button')) || nav;
+    }
     const templateLink = host.querySelector('a[href]:not(.chirag-gh-nav-button):not(.chirag-gh-nav-button a)');
     const list = host.matches('ul, ol');
     const templateItem = templateLink?.closest('li');
+    // Clone the already-filtered native anchor; never reselect from a cloned
+    // item, which could pick an excluded foreign anchor sharing that item.
+    const link = templateLink ? templateLink.cloneNode(false) : document.createElement('a');
     const item = list
-      ? templateItem?.parentElement === host ? templateItem.cloneNode(true) : document.createElement('li')
-      : templateLink ? templateLink.cloneNode(false) : document.createElement('a');
-    const link = item.tagName === 'A' ? item : item.querySelector('a[href]') || document.createElement('a');
+      ? templateItem?.parentElement === host ? templateItem.cloneNode(false) : document.createElement('li')
+      : link;
 
     // A cloned breadcrumb can contain menu buttons, counters and duplicate ids.
     if (item !== link) item.replaceChildren(link);
