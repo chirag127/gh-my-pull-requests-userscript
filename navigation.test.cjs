@@ -3,12 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const slug = path.basename(__dirname);
-const source = fs.readFileSync(path.join(__dirname, slug + '.user.js'), 'utf8');
-const pulls = slug.includes('pull-requests');
-const ID = pulls ? 'chirag-my-pull-requests-link' : 'chirag-my-issues-link';
-const HREF = 'https://github.com/' + (pulls ? 'pulls' : 'issues');
-const LABEL = pulls ? 'My pull requests' : 'My issues';
+const SCRIPT = 'gh-my-pull-requests-userscript.user.js';
+const ID = 'chirag-my-pull-requests-link';
+const HREF = 'https://github.com/pulls';
+const LABEL = 'My pull requests';
+const OTHER_ID = 'chirag-my-issues-link';
+const source = fs.readFileSync(path.join(__dirname, SCRIPT), 'utf8');
 
 // A strict fixture for the selectors and DOM operations these two scripts use.
 // Unknown selectors fail rather than silently behaving unlike the browser.
@@ -135,7 +135,7 @@ test('other userscript direct anchors are not used as native templates', () => {
   assert.equal(link.classList.contains('foreign-style'), false); assert.equal(link.classList.contains('native-link'), true); assert.equal(native.href, '/dashboard'); assert.equal(foreign.id, 'other-script');
 });
 test('stale cleanup removes only this script\'s own wrapper', () => {
-  const otherId = pulls ? 'chirag-my-issues-link' : 'chirag-my-pull-requests-link';
+  const otherId = OTHER_ID;
   const h = harness(); const nav = h.nav('ul'); h.native(nav);
   const stale = nav.appendChild(new Element('li'));
   stale.classList.add('chirag-gh-nav-button'); stale.setAttribute('data-chirag-nav-id', ID);
