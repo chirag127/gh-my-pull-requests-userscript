@@ -284,6 +284,31 @@ test('does not modify an unowned element that shares the injected id', () => {
   assert.equal(foreign.getAttribute('href'), '/foreign');
   assert.equal(nav.querySelectorAll('a[href="' + HREF + '"]').length, 0);
 });
+for (const tag of ['nav', 'ul', 'ol']) test('preserves identical unmarked foreign anchor in ' + tag, () => {
+  const h = harness(); const nav = h.nav(tag);
+  const foreign = h.native(nav).link;
+  foreign.id = ID; foreign.href = HREF; foreign.textContent = LABEL;
+  const parent = foreign.parentNode; const attributes = foreign.attributes;
+  h.run(); h.mutate(); h.run(); h.mutate();
+  assert.equal(h.document.getElementById(ID), foreign);
+  assert.equal(foreign.parentNode, parent);
+  assert.deepEqual(foreign.attributes, attributes);
+  assert.equal(foreign.textContent, LABEL);
+  assert.equal(h.document.querySelectorAll('[data-chirag-nav-id="' + ID + '"]').length, 0);
+});
+for (const tag of ['ul', 'ol']) test('recognizes moved owned anchor across reinjection in ' + tag, () => {
+  const h = harness(); const nav = h.nav(tag); h.native(nav); h.run();
+  const moved = h.verify(nav); const oldWrapper = moved.parentNode;
+  const foreignItem = nav.appendChild(new Element('li'));
+  foreignItem.appendChild(moved);
+  h.run(); h.mutate();
+  const restored = h.verify(nav);
+  assert.notEqual(restored, moved);
+  assert.equal(oldWrapper.parentNode, null);
+  assert.equal(moved.parentNode, null);
+  assert.equal(foreignItem.parentNode, nav);
+  assert.equal(nav.querySelectorAll('a[href="' + HREF + '"]').length, 1);
+});
 test('reclaims a direct anchor only when its destination still matches', () => {
   const h = harness(); const nav = h.nav(); h.native(nav); h.run();
   const link = h.verify(nav); link.removeAttribute('id'); link.setAttribute('href', '/dashboard');

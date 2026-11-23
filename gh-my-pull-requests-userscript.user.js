@@ -17,6 +17,9 @@
   const HREF = 'https://github.com/pulls';
   const LABEL = 'My pull requests';
 
+  // Retain ownership across DOM moves and script reinjection without claiming lookalikes.
+  const OWNED_LINK = Symbol.for(ID + ':owned-link');
+
   function mount() {
     // Cheap path: an intact, correctly owned link needs no global query.
     const mounted = document.getElementById(ID);
@@ -32,7 +35,7 @@
           mounted.title = LABEL;
           return;
         }
-      } else if (isOurLink) {
+      } else if (mounted[OWNED_LINK] === true) {
         // Reparented out of its wrapper: drop it so stale owned wrappers can
         // be reconciled and a correctly placed link mounted.
         mounted.remove();
@@ -91,6 +94,7 @@
     item.removeAttribute('id');
     item.classList.add('chirag-gh-nav-button');
     item.setAttribute('data-chirag-nav-id', ID);
+    link[OWNED_LINK] = true;
     link.id = ID;
     link.href = HREF;
     link.textContent = LABEL;
