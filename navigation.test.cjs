@@ -239,7 +239,7 @@ test('nested native template keeps its classes in the fresh-li fallback', () => 
 test('valid mounted link skips document-wide ownership queries', () => {
   const h = harness(); const nav = h.nav('ul'); h.native(nav); h.run(); h.verify(nav);
   const original = h.document.querySelectorAll; let calls = 0;
-  h.document.querySelectorAll = selector => { calls++; return original.call(h.document, selector); };
+  h.document.querySelectorAll = selector => { if (selector === '[data-chirag-nav-id="' + ID + '"]') calls++; return original.call(h.document, selector); };
   for (let i = 0; i < 5; i++) h.mutate();
   assert.equal(calls, 0);
 });
@@ -317,6 +317,24 @@ test('reclaims a direct anchor only when its destination still matches', () => {
   assert.equal(restored.getAttribute('href'), HREF);
   assert.equal(restored.parentNode, nav);
 });
+for (const tag of ['nav', 'ul', 'ol']) {
+  for (const loseId of [false, true]) test('rebuilds misplaced owned item from ' + tag + ' with id loss=' + loseId, () => {
+    const h = harness(); const nav = h.nav(tag); h.native(nav); h.run();
+    const moved = h.verify(nav); const item = tag === 'nav' ? moved : moved.parentNode;
+    const foreign = h.document.documentElement.appendChild(new Element('aside'));
+    const sibling = foreign.appendChild(new Element('span')); sibling.textContent = 'Keep me';
+    foreign.appendChild(item);
+    if (loseId) moved.removeAttribute('id');
+    h.mutate();
+    const restored = h.verify(nav);
+    assert.notEqual(restored, moved);
+    assert.equal(item.parentNode, null);
+    assert.equal(foreign.parentNode, h.document.documentElement);
+    assert.deepEqual(foreign.children, [sibling]);
+    assert.equal(sibling.textContent, 'Keep me');
+    assert.equal(h.document.querySelectorAll('a[href="' + HREF + '"]').length, 1);
+  });
+}
 test('reconciles an anchor moved out of its owned wrapper', () => {
   const h = harness(); const nav = h.nav('ul'); h.native(nav); h.run();
   nav.appendChild(h.verify(nav));
