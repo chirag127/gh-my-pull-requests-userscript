@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub: My Pull Requests Button
 // @namespace    https://github.com/chirag127
-// @version      1.0.5
+// @version      1.0.6
 // @description  Adds a "My pull requests" button to GitHub's header that opens all pull requests involving your account.
 // @author       chirag127
 // @match        https://github.com/*
@@ -21,13 +21,26 @@
   const OWNED_LINK = Symbol.for(ID + ':owned-link');
 
   function mount() {
-    // Cheap path: an intact, correctly owned link needs no global query.
+    const nav =
+      document.querySelector('.AppHeader-nav') ||
+      document.querySelector('nav[aria-label="Global"]') ||
+      document.querySelector('header nav');
+    if (!nav) return;
+
+    let host = nav;
+    if (!nav.matches('ul, ol')) {
+      host = Array.from(nav.querySelectorAll('ul, ol'))
+        .find(list => !list.closest('.chirag-gh-nav-button')) || nav;
+    }
+    // Only an owned item in the current host qualifies for the fast path.
     const mounted = document.getElementById(ID);
     if (mounted) {
       const owned = mounted.closest('[data-chirag-nav-id="' + ID + '"]');
       const isOurLink = mounted.tagName === 'A' &&
         mounted.getAttribute('href') === HREF && mounted.textContent === LABEL;
-      if (owned) {
+      if (owned && owned.parentNode !== host) {
+        owned.remove();
+      } else if (owned) {
         if (isOurLink) return;
         if (mounted.tagName === 'A') {
           mounted.setAttribute('href', HREF);
@@ -49,6 +62,10 @@
     // to remove. Foreign nodes and the other script's markers are untouched.
     for (const owned of document.querySelectorAll('[data-chirag-nav-id="' + ID + '"]')) {
       if (!owned.parentNode) continue;
+      if (owned.parentNode !== host) {
+        owned.remove();
+        continue;
+      }
       if (owned.tagName === 'A') {
         if (owned.getAttribute('href') !== HREF) owned.remove();
         else if (owned.id !== ID) owned.id = ID;
@@ -61,17 +78,6 @@
     }
     if (document.getElementById(ID)) return;
 
-    const nav =
-      document.querySelector('.AppHeader-nav') ||
-      document.querySelector('nav[aria-label="Global"]') ||
-      document.querySelector('header nav');
-    if (!nav) return;
-
-    let host = nav;
-    if (!nav.matches('ul, ol')) {
-      host = Array.from(nav.querySelectorAll('ul, ol'))
-        .find(list => !list.closest('.chirag-gh-nav-button')) || nav;
-    }
     const templateLink = host.querySelector('a[href]:not(.chirag-gh-nav-button):not(.chirag-gh-nav-button a)');
     const list = host.matches('ul, ol');
     const templateItem = templateLink?.closest('li');
