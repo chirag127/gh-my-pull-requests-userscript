@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub: My Pull Requests Button
 // @namespace    https://github.com/chirag127
-// @version      1.0.0
+// @version      1.0.6
 // @description  Adds a "My pull requests" button to GitHub's header that opens all pull requests involving your account.
 // @author       chirag127
 // @match        https://github.com/*
@@ -17,22 +17,90 @@
   const HREF = 'https://github.com/pulls';
   const LABEL = 'My pull requests';
 
-  function mount() {
-    if (document.getElementById(ID)) return;
+  // Retain ownership across DOM moves and script reinjection without claiming lookalikes.
+  const OWNED_LINK = Symbol.for(ID + ':owned-link');
 
+  function mount() {
     const nav =
       document.querySelector('.AppHeader-nav') ||
       document.querySelector('nav[aria-label="Global"]') ||
       document.querySelector('header nav');
     if (!nav) return;
 
-    const templateLink = nav.querySelector('a[href]');
-    const template = templateLink ? templateLink.closest('li') || templateLink : null;
-    const item = template ? template.cloneNode(true) : document.createElement('li');
-    const link = item.tagName.toLowerCase() === 'a' ? item : item.querySelector('a[href]') || document.createElement('a');
+    let host = nav;
+    if (!nav.matches('ul, ol')) {
+      host = Array.from(nav.querySelectorAll('ul, ol'))
+        .find(list => !list.closest('.chirag-gh-nav-button')) || nav;
+    }
+    // Only an owned item in the current host qualifies for the fast path.
+    const mounted = document.getElementById(ID);
+    if (mounted) {
+      const owned = mounted.closest('[data-chirag-nav-id="' + ID + '"]');
+      const isOurLink = mounted.tagName === 'A' &&
+        mounted.getAttribute('href') === HREF && mounted.textContent === LABEL;
+      if (owned && owned.parentNode !== host) {
+        owned.remove();
+      } else if (owned) {
+        if (isOurLink) return;
+        if (mounted.tagName === 'A') {
+          mounted.setAttribute('href', HREF);
+          mounted.textContent = LABEL;
+          mounted.title = LABEL;
+          return;
+        }
+      } else if (mounted[OWNED_LINK] === true) {
+        // Reparented out of its wrapper: drop it so stale owned wrappers can
+        // be reconciled and a correctly placed link mounted.
+        mounted.remove();
+      } else {
+        return; // An unowned element merely sharing our id is left alone.
+      }
+    }
+
+    // Reconcile only nodes carrying this script's marker. A marked link that
+    // lost its id is restored; a marked wrapper without a marked link is ours
+    // to remove. Foreign nodes and the other script's markers are untouched.
+    for (const owned of document.querySelectorAll('[data-chirag-nav-id="' + ID + '"]')) {
+      if (!owned.parentNode) continue;
+      if (owned.parentNode !== host) {
+        owned.remove();
+        continue;
+      }
+      if (owned.tagName === 'A') {
+        if (owned.getAttribute('href') !== HREF) owned.remove();
+        else if (owned.id !== ID) owned.id = ID;
+        continue;
+      }
+      const ownedLink = Array.from(owned.querySelectorAll('a[href]'))
+        .find(a => a.getAttribute('href') === HREF);
+      if (!ownedLink || !ownedLink.getAttribute('href')) owned.remove();
+      else if (ownedLink.id !== ID) ownedLink.id = ID;
+    }
+    if (document.getElementById(ID)) return;
+
+    const templateLink = host.querySelector('a[href]:not(.chirag-gh-nav-button):not(.chirag-gh-nav-button a)');
+    const list = host.matches('ul, ol');
+    const templateItem = templateLink?.closest('li');
+    // Clone the already-filtered native anchor; never reselect from a cloned
+    // item, which could pick an excluded foreign anchor sharing that item.
+    const link = templateLink ? templateLink.cloneNode(false) : document.createElement('a');
+    const item = list
+      ? templateItem?.parentElement === host ? templateItem.cloneNode(false) : document.createElement('li')
+      : link;
+
+    // A cloned breadcrumb can contain menu buttons, counters and duplicate ids.
+    if (item !== link) item.replaceChildren(link);
+    for (const element of new Set([item, link])) {
+      for (const { name } of [...element.attributes]) {
+        if (name !== 'class') element.removeAttribute(name);
+      }
+      element.classList.remove('active', 'selected');
+    }
 
     item.removeAttribute('id');
     item.classList.add('chirag-gh-nav-button');
+    item.setAttribute('data-chirag-nav-id', ID);
+    link[OWNED_LINK] = true;
     link.id = ID;
     link.href = HREF;
     link.textContent = LABEL;
@@ -41,9 +109,7 @@
     link.removeAttribute('aria-current');
     link.removeAttribute('data-selected-links');
     link.removeAttribute('data-ga-click');
-    if (!link.parentNode || link.parentNode !== item) item.appendChild(link);
-
-    const host = nav.tagName.toLowerCase() === 'ul' ? nav : nav.querySelector('ul') || nav;
+    if (item !== link && link.parentNode !== item) item.appendChild(link);
     host.appendChild(item);
   }
 
